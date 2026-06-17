@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🍞 달콤한 제빵일기</title>
+  <style>
+    :root {
+      --bg-color: #FFF9F2;
+      --main-color: #FFDEB4;
+      --point-color: #FFB4B4;
+      --text-color: #61481C;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Malgun Gothic', sans-serif; }
+    body { background-color: var(--bg-color); color: var(--text-color); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    header { font-size: 24px; font-weight: bold; margin-bottom: 20px; text-shadow: 1px 1px var(--main-color); }
+    
+    .card { background: white; border-radius: 20px; padding: 20px; width: 100%; max-width: 450px; box-shadow: 0 8px 16px rgba(255, 180, 180, 0.2); margin-bottom: 20px; border: 2px solid var(--main-color); }
+    h3 { margin-bottom: 15px; border-bottom: 2px dashed var(--main-color); padding-bottom: 5px; }
+    
+    label { font-size: 14px; font-weight: bold; display: block; margin-top: 10px; }
+    input, textarea { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid var(--main-color); border-radius: 10px; background-color: #FFFDF9; font-size: 14px; outline: none; }
+    input:focus, textarea:focus { border-color: var(--point-color); }
+    
+    /* 파일 업로드 스타일 커스텀 */
+    input[type="file"] { background: white; padding: 5px; }
+    
+    .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+    button { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; }
+    .btn-save { background-color: var(--main-color); color: var(--text-color); }
+    .btn-delete { background-color: var(--point-color); color: white; }
+    .btn-cancel { background-color: #E0E0E0; color: #666; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    button:active { transform: scale(0.98); }
+
+    /* 목록 스타일 */
+    .diary-list { list-style: none; width: 100%; max-width: 450px; }
+    .diary-item { background: white; padding: 15px; border-radius: 15px; margin-bottom: 10px; cursor: pointer; border: 1px solid var(--main-color); transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
+    .diary-item:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+    .diary-item .title { font-weight: bold; }
+    .diary-item .date { font-size: 12px; color: #999; }
+    
+    /* 리스트 내부 미니 썸네일 */
+    .thumb-img { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; margin-right: 10px; border: 1px solid var(--main-color); }
+    .item-left { display: flex; align-items: center; }
+
+    .preview-img { width: 100%; max-height: 250px; object-fit: cover; border-radius: 10px; margin-top: 10px; display: none; border: 1px solid var(--main-color); }
+  </style>
+</head>
+<body>
+
+  <header>🍞 나의 제빵일기</header>
+
+  <div class="card">
+    <h3 id="form-title">오늘의 빵 기록하기</h3>
+    <form id="bakery-form">
+      <input type="hidden" id="row-id">
+      
+      <label>빵 종류</label>
+      <input type="text" id="bread-type" placeholder="예: 소금빵, 식빵" required>
+      
+      <label>재료</label>
+      <input type="text" id="ingredients" placeholder="예: 강력분, 이스트, 버터" required>
+      
+      <label>양 (g 또는 비율)</label>
+      <input type="text" id="amounts" placeholder="예: 300g, 4g, 40g" required>
+      
+      <label>레시피</label>
+      <textarea id="recipe" rows="4" placeholder="만드는 순서와 팁을 적어주세요."></textarea>
+      
+      <label>연관 URL</label>
+      <input type="url" id="ref-url" placeholder="https://...">
+      
+      <label>사진 등록 (카메라/앨범)</label>
+      <input type="file" id="photo-file" accept="image/*">
+      <img id="image-preview" class="preview-img">
+
+      <div class="btn-group">
+        <button type="submit" class="btn-save" id="btn-submit">저장하기</button>
+        <button type="button" class="btn-delete" id="btn-delete" style="display:none;">삭제</button>
+        <button type="button" class="btn-cancel" id="btn-cancel" style="display:none;">취소</button>
+      </div>
+    </form>
+  </div>
+
+  <header style="font-size: 20px; margin-top: 10px;">📋 지난 기록 목록</header>
+  <ul class="diary-list" id="diary-list"></ul>
+
+  <script>
+    // ⚠️ 중요: 본인의 Google Apps Script 웹 앱 URL을 붙여넣으세요!
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbz_FVskH7za1Fb5_fWIm1DELEnI8OhKu5DYo-5DRjcqL61EQXazUq0t873KQprfB4CK/exec"; 
+    let diaryData = [];
+    let fileBase64 = "";
+    let fileName = "";
+    let fileMimeType = "";
+
+    // 데이터 목록 불러오기 (리스트에 작은 섬네일 추가)
+    async function loadLogs() {
+      const listEl = document.getElementById('diary-list');
+      listEl.innerHTML = "<p style='text-align:center;'>기록을 불러오는 중... 🥐</p>";
+      
+      try {
+        const response = await fetch(GAS_URL);
+        diaryData = await response.json();
+        
+        listEl.innerHTML = "";
+        if(diaryData.length === 0) {
+          listEl.innerHTML = "<p style='text-align:center; color:#999;'>아직 기록이 없어요.</p>";
+          return;
+        }
+
+        diaryData.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'diary-item';
+          li.onclick = () => viewDetail(item);
+          
+          // 사진이 있으면 섬네일 표시, 없으면 이모지 대체
+          const imgHtml = item['사진 URL'] 
+            ? `<img src="${item['사진 URL']}" class="thumb-img">`
+            : `<div class="thumb-img" style="display:flex; justify-content:center; align-items:center; background:#eee; font-size:24px;">🥖</div>`;
+
+          li.innerHTML = `
+            <div class="item-left">
+              ${imgHtml}
+              <div>
+                <div class="title">${item['빵종류']}</div>
+                <div class="date">${item['입력날짜']}</div>
+              </div>
+            </div>
+            ➔
+          `;
+          listEl.appendChild(li);
+        });
+      } catch (error) {
+        listEl.innerHTML = "<p style='text-align:center; color:red;'>불러오기 실패 😢</p>";
+      }
+    }
+
+    // 파일 선택 시 미리보기 처리 및 Base64 인코딩
+    document.getElementById('photo-file').onchange = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      fileName = file.name;
+      fileMimeType = file.type;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        fileBase64 = evt.target.result; // Base64 데이터 추출
+        
+        // 미리보기 이미지 띄우기
+        const preview = document.getElementById('image-preview');
+        preview.src = fileBase64;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    };
+
+    // 폼 초기화
+    function resetForm() {
+      document.getElementById('bakery-form').reset();
+      document.getElementById('row-id').value = '';
+      document.getElementById('form-title').innerText = '오늘의 빵 기록하기';
+      document.getElementById('btn-submit').innerText = '저장하기';
+      document.getElementById('btn-submit').disabled = false;
+      document.getElementById('btn-delete').style.display = 'none';
+      document.getElementById('btn-cancel').style.display = 'none';
+      document.getElementById('image-preview').style.display = 'none';
+      fileBase64 = ""; fileName = ""; fileMimeType = ""; // 파일 변수 초기화
+    }
+
+    // 상세 보기
+    function viewDetail(item) {
+      document.getElementById('form-title').innerText = '빵 기록 수정 / 삭제';
+      document.getElementById('row-id').value = item.id;
+      document.getElementById('bread-type').value = item['빵종류'];
+      document.getElementById('ingredients').value = item['재료'];
+      document.getElementById('amounts').value = item['양'];
+      document.getElementById('recipe').value = item['레시피'];
+      document.getElementById('ref-url').value = item['연관 url'] || '';
+      
+      const imgPreview = document.getElementById('image-preview');
+      if(item['사진 URL']) {
+        imgPreview.src = item['사진 URL'];
+        imgPreview.style.display = 'block';
+      } else {
+        imgPreview.style.display = 'none';
+      }
+
+      document.getElementById('btn-submit').innerText = '수정하기';
+      document.getElementById('btn-delete').style.display = 'inline-block';
+      document.getElementById('btn-cancel').style.display = 'inline-block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // CUD 제출 처리
+    document.getElementById('bakery-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('row-id').value;
+      const action = id ? "update" : "create";
+      
+      document.getElementById('btn-submit').innerText = "사진 및 데이터 업로드 중...";
+      document.getElementById('btn-submit').disabled = true;
+
+      const payload = {
+        action: action,
+        id: parseInt(id),
+        breadType: document.getElementById('bread-type').value,
+        ingredients: document.getElementById('ingredients').value,
+        amounts: document.getElementById('amounts').value,
+        recipe: document.getElementById('recipe').value,
+        url: document.getElementById('ref-url').value,
+        // 파일 정보 첨부
+        fileData: fileBase64,
+        fileName: fileName,
+        fileMimeType: fileMimeType
+      };
+
+      try {
+        await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        resetForm();
+        loadLogs();
+      } catch (e) {
+        alert("처리에 실패했습니다. 다시 시도해 주세요.");
+        document.getElementById('btn-submit').innerText = id ? "수정하기" : "저장하기";
+        document.getElementById('btn-submit').disabled = false;
+      }
+    };
+
+    document.getElementById('btn-delete').onclick = async () => {
+      if(!confirm("정말 이 기록을 삭제할까요?")) return;
+      const id = document.getElementById('row-id').value;
+      
+      document.getElementById('btn-submit').disabled = true;
+      try {
+        await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "delete", id: parseInt(id) })
+        });
+        resetForm();
+        loadLogs();
+      } catch(e) {
+        alert("삭제 실패");
+        document.getElementById('btn-submit').disabled = false;
+      }
+    };
+
+    document.getElementById('btn-cancel').onclick = resetForm;
+
+    // 첫 실행 시 목록 로드
+    loadLogs();
+  </script>
+</body>
+</html>
