@@ -23,16 +23,26 @@
     input, textarea { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid var(--main-color); border-radius: 10px; background-color: #FFFDF9; font-size: 14px; outline: none; }
     input:focus, textarea:focus { border-color: var(--point-color); }
     
-    /* 파일 업로드 스타일 커스텀 */
-    input[type="file"] { background: white; padding: 5px; }
+    /* 동적 재료 세트 스타일 */
+    .ingredient-group { display: flex; flex-direction: column; gap: 5px; margin-top: 5px; }
+    .ingredient-row { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
+    .ingredient-row input { margin-top: 0; }
+    .ingredient-row input.ing-name { flex: 2; }
+    .ingredient-row input.ing-amount { flex: 1; }
     
+    /* 버튼 공통 및 커스텀 */
     .btn-group { display: flex; gap: 10px; margin-top: 15px; }
-    button { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; }
-    .btn-save { background-color: var(--main-color); color: var(--text-color); }
-    .btn-delete { background-color: var(--point-color); color: white; }
-    .btn-cancel { background-color: #E0E0E0; color: #666; }
-    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    button { padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; }
     button:active { transform: scale(0.98); }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    
+    .btn-add-ing { background-color: #FFF; border: 1px dashed var(--text-color); color: var(--text-color); padding: 6px 12px; font-size: 12px; margin-top: 5px; width: 100%; }
+    .btn-remove-ing { background-color: #E0E0E0; color: #666; padding: 10px; border-radius: 10px; font-size: 12px; }
+    .btn-save { flex: 1; background-color: var(--main-color); color: var(--text-color); }
+    .btn-delete { flex: 1; background-color: var(--point-color); color: white; }
+    .btn-cancel { flex: 1; background-color: #E0E0E0; color: #666; }
+
+    input[type="file"] { background: white; padding: 5px; }
 
     /* 목록 스타일 */
     .diary-list { list-style: none; width: 100%; max-width: 450px; }
@@ -41,10 +51,8 @@
     .diary-item .title { font-weight: bold; }
     .diary-item .date { font-size: 12px; color: #999; }
     
-    /* 리스트 내부 미니 썸네일 */
     .thumb-img { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; margin-right: 10px; border: 1px solid var(--main-color); }
     .item-left { display: flex; align-items: center; }
-
     .preview-img { width: 100%; max-height: 250px; object-fit: cover; border-radius: 10px; margin-top: 10px; display: none; border: 1px solid var(--main-color); }
   </style>
 </head>
@@ -60,11 +68,15 @@
       <label>빵 종류</label>
       <input type="text" id="bread-type" placeholder="예: 소금빵, 식빵" required>
       
-      <label>재료</label>
-      <input type="text" id="ingredients" placeholder="예: 강력분, 이스트, 버터" required>
-      
-      <label>양 (g 또는 비율)</label>
-      <input type="text" id="amounts" placeholder="예: 300g, 4g, 40g" required>
+      <label>재료 및 양</label>
+      <div id="ingredient-container" class="ingredient-group">
+        <div class="ingredient-row">
+          <input type="text" class="ing-name" placeholder="재료 (예: 강력분)" required>
+          <input type="text" class="ing-amount" placeholder="양 (예: 300g)" required>
+          <button type="button" class="btn-remove-ing" onclick="removeIngredientRow(this)">X</button>
+        </div>
+      </div>
+      <button type="button" class="btn-add-ing" id="btn-add-ingredient">+ 재료 추가하기</button>
       
       <label>레시피</label>
       <textarea id="recipe" rows="4" placeholder="만드는 순서와 팁을 적어주세요."></textarea>
@@ -88,14 +100,40 @@
   <ul class="diary-list" id="diary-list"></ul>
 
   <script>
-    // ⚠️ 중요: 본인의 Google Apps Script 웹 앱 URL을 붙여넣으세요!
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz_FVskH7za1Fb5_fWIm1DELEnI8OhKu5DYo-5DRjcqL61EQXazUq0t873KQprfB4CK/exec"; 
     let diaryData = [];
     let fileBase64 = "";
     let fileName = "";
     let fileMimeType = "";
 
-    // 데이터 목록 불러오기 (리스트에 작은 섬네일 추가)
+    // ➕ 새로운 재료 행 추가 기능
+    document.getElementById('btn-add-ingredient').onclick = () => {
+      createIngredientRow("", "");
+    };
+
+    function createIngredientRow(name = "", amount = "") {
+      const container = document.getElementById('ingredient-container');
+      const row = document.createElement('div');
+      row.className = 'ingredient-row';
+      row.innerHTML = `
+        <input type="text" class="ing-name" placeholder="재료" value="${name}" required>
+        <input type="text" class="ing-amount" placeholder="양" value="${amount}" required>
+        <button type="button" class="btn-remove-ing" onclick="removeIngredientRow(this)">X</button>
+      `;
+      container.appendChild(row);
+    }
+
+    // ❌ 재료 행 삭제 기능
+    function removeIngredientRow(button) {
+      const rows = document.querySelectorAll('.ingredient-row');
+      if (rows.length <= 1) {
+        alert("최소 한 개의 재료는 입력해야 해요!");
+        return;
+      }
+      button.parentElement.remove();
+    }
+
+    // 데이터 목록 불러오기
     async function loadLogs() {
       const listEl = document.getElementById('diary-list');
       listEl.innerHTML = "<p style='text-align:center;'>기록을 불러오는 중... 🥐</p>";
@@ -115,7 +153,6 @@
           li.className = 'diary-item';
           li.onclick = () => viewDetail(item);
           
-          // 사진이 있으면 섬네일 표시, 없으면 이모지 대체
           const imgHtml = item['사진 URL'] 
             ? `<img src="${item['사진 URL']}" class="thumb-img">`
             : `<div class="thumb-img" style="display:flex; justify-content:center; align-items:center; background:#eee; font-size:24px;">🥖</div>`;
@@ -137,19 +174,15 @@
       }
     }
 
-    // 파일 선택 시 미리보기 처리 및 Base64 인코딩
+    // 파일 선택 및 미리보기
     document.getElementById('photo-file').onchange = function(e) {
       const file = e.target.files[0];
       if (!file) return;
-
       fileName = file.name;
       fileMimeType = file.type;
-
       const reader = new FileReader();
       reader.onload = function(evt) {
-        fileBase64 = evt.target.result; // Base64 데이터 추출
-        
-        // 미리보기 이미지 띄우기
+        fileBase64 = evt.target.result;
         const preview = document.getElementById('image-preview');
         preview.src = fileBase64;
         preview.style.display = 'block';
@@ -167,19 +200,37 @@
       document.getElementById('btn-delete').style.display = 'none';
       document.getElementById('btn-cancel').style.display = 'none';
       document.getElementById('image-preview').style.display = 'none';
-      fileBase64 = ""; fileName = ""; fileMimeType = ""; // 파일 변수 초기화
+      fileBase64 = ""; fileName = ""; fileMimeType = "";
+
+      // 재료 입력창 한 개만 남기고 리셋
+      const container = document.getElementById('ingredient-container');
+      container.innerHTML = `
+        <div class="ingredient-row">
+          <input type="text" class="ing-name" placeholder="재료 (예: 강력분)" required>
+          <input type="text" class="ing-amount" placeholder="양 (예: 300g)" required>
+          <button type="button" class="btn-remove-ing" onclick="removeIngredientRow(this)">X</button>
+        </div>
+      `;
     }
 
-    // 상세 보기
+    // 상세 보기 (시트의 콤마 데이터를 쪼개서 개별 입력창으로 채워줌)
     function viewDetail(item) {
       document.getElementById('form-title').innerText = '빵 기록 수정 / 삭제';
       document.getElementById('row-id').value = item.id;
       document.getElementById('bread-type').value = item['빵종류'];
-      document.getElementById('ingredients').value = item['재료'];
-      document.getElementById('amounts').value = item['양'];
       document.getElementById('recipe').value = item['레시피'];
       document.getElementById('ref-url').value = item['연관 url'] || '';
       
+      // 쉼표로 묶인 재료와 양 분리해서 동적 생성
+      const names = String(item['재료']).split(', ');
+      const amounts = String(item['양']).split(', ');
+      const container = document.getElementById('ingredient-container');
+      container.innerHTML = ""; // 기존 창 비우기
+
+      names.forEach((name, idx) => {
+        createIngredientRow(name, amounts[idx] || "");
+      });
+
       const imgPreview = document.getElementById('image-preview');
       if(item['사진 URL']) {
         imgPreview.src = item['사진 URL'];
@@ -194,24 +245,35 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // CUD 제출 처리
+    // 데이터 수집 후 CUD 전송
     document.getElementById('bakery-form').onsubmit = async (e) => {
       e.preventDefault();
       const id = document.getElementById('row-id').value;
       const action = id ? "update" : "create";
       
-      document.getElementById('btn-submit').innerText = "사진 및 데이터 업로드 중...";
+      // 배열로 입력된 재료들을 가져와 시트에 맞게 '쉼표'로 병합
+      const nameInputs = document.querySelectorAll('.ing-name');
+      const amountInputs = document.querySelectorAll('.ing-amount');
+      
+      let namesArray = [];
+      let amountsArray = [];
+      
+      nameInputs.forEach((input, index) => {
+        namesArray.push(input.value.trim());
+        amountsArray.push(amountInputs[index].value.trim());
+      });
+
+      document.getElementById('btn-submit').innerText = "업로드 중...";
       document.getElementById('btn-submit').disabled = true;
 
       const payload = {
         action: action,
         id: parseInt(id),
         breadType: document.getElementById('bread-type').value,
-        ingredients: document.getElementById('ingredients').value,
-        amounts: document.getElementById('amounts').value,
+        ingredients: namesArray.join(', '), // '강력분, 이스트, 버터' 형태로 결합
+        amounts: amountsArray.join(', '),     // '300g, 4g, 40g' 형태로 결합
         recipe: document.getElementById('recipe').value,
         url: document.getElementById('ref-url').value,
-        // 파일 정보 첨부
         fileData: fileBase64,
         fileName: fileName,
         fileMimeType: fileMimeType
@@ -225,7 +287,7 @@
         resetForm();
         loadLogs();
       } catch (e) {
-        alert("처리에 실패했습니다. 다시 시도해 주세요.");
+        alert("처리에 실패했습니다.");
         document.getElementById('btn-submit').innerText = id ? "수정하기" : "저장하기";
         document.getElementById('btn-submit').disabled = false;
       }
@@ -234,7 +296,6 @@
     document.getElementById('btn-delete').onclick = async () => {
       if(!confirm("정말 이 기록을 삭제할까요?")) return;
       const id = document.getElementById('row-id').value;
-      
       document.getElementById('btn-submit').disabled = true;
       try {
         await fetch(GAS_URL, {
@@ -250,8 +311,6 @@
     };
 
     document.getElementById('btn-cancel').onclick = resetForm;
-
-    // 첫 실행 시 목록 로드
     loadLogs();
   </script>
 </body>
